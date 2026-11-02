@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="km">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>កម្មវិធីរាប់វត្ថុ</title>
+<style>
+  :root{--bg:#0f1115;--card:#1b1f27;--fg:#f2f4f8;--mut:#9aa3b2;--acc:#22c55e;--red:#ef4444;--yel:#facc15}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"Noto Sans Khmer","Khmer OS",system-ui,sans-serif;min-height:100vh}
+  .wrap{max-width:900px;margin:0 auto;padding:12px 14px 40px}
+  h1{font-size:18px;margin:6px 0 10px;font-weight:600}
+  .stage{position:relative;width:100%;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:4/3}
+  .stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  .stage video{object-fit:fill}
+  .count{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.65);padding:6px 16px;border-radius:12px;text-align:center;backdrop-filter:blur(4px)}
+  .count small{display:block;font-size:12px;color:var(--mut)}
+  .count b{font-size:54px;line-height:1;font-variant-numeric:tabular-nums;transition:transform .15s}
+  .count.flash b{transform:scale(1.25);color:var(--acc)}
+  .count .miss{margin-top:4px;font-size:13px;color:#fca5a5}
+  .status{position:absolute;bottom:8px;left:10px;right:10px;font-size:12px;color:#fff;text-shadow:0 1px 3px #000;display:flex;justify-content:space-between;gap:8px}
+  .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:var(--mut)}
+  .alert{position:absolute;left:10px;right:10px;bottom:34px;background:rgba(239,68,68,.94);color:#fff;padding:10px 14px;border-radius:12px;font-weight:600;font-size:15px;text-align:center;opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none}
+  .alert.show{opacity:1;transform:none}
+  .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+  button{flex:1;min-width:120px;padding:14px;border:0;border-radius:12px;font:inherit;font-weight:600;font-size:16px;color:#fff;background:#2b3240;cursor:pointer}
+  button.go{background:var(--acc);color:#04210f}
+  button.rst{background:var(--red)}
+  button:active{opacity:.8}
+  .panel{background:var(--card);border-radius:14px;padding:12px 14px;margin-top:12px}
+  .panel label{display:flex;justify-content:space-between;font-size:14px;margin-top:10px;color:var(--mut)}
+  .panel label span{color:var(--fg)}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  select{width:100%;padding:10px;border-radius:10px;background:#11141a;color:var(--fg);border:1px solid #2b3240;font:inherit;margin-top:6px}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px}
+  .chk label{margin:0;display:inline;color:var(--fg)}
+  .tip{font-size:13px;color:var(--mut);line-height:1.6;margin-top:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📦 កម្មវិធីរាប់វត្ថុតាមកាមេរ៉ា</h1>
+
+  <div class="stage" id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="count" id="countBox">
+      <small>ចំនួនវត្ថុ</small><b id="count">0</b>
+      <div class="miss">⚠ ចាប់មិនបាន៖ <span id="missed">0</span></div>
+    </div>
+    <div class="alert" id="alertBox"></div>
+    <div class="status"><span id="stHand"></span><span id="stInfo"></span></div>
+    <div class="msg" id="msg">⏳ កំពុងផ្ទុកកម្មវិធី... បើអក្សរនេះមិនប្តូរ មានន័យថាកន្លែងបើកឯកសារនេះមិនអនុញ្ញាតឲ្យដំណើរការ JavaScript ទេ សូមបើកក្នុង Chrome ឬ Safari ដោយផ្ទាល់ (តាម https)។</div>
+  </div>
+
+  <div class="row">
+    <button class="go" id="btnStart">▶ បើកកាមេរ៉ា</button>
+    <button class="rst" id="btnReset">↺ ចាប់ផ្តើមរាប់ថ្មី (០)</button>
+    <button id="btnFlip">🔄 ប្តូរកាមេរ៉ា</button>
+  </div>
+
+  <div class="panel">
+    <div>ទិសដៅដែលវត្ថុរត់ឆ្លងកាត់</div>
+    <select id="orient">
+      <option value="v">វត្ថុរត់ឆ្វេង ↔ ស្តាំ (បន្ទាត់បញ្ឈរ)</option>
+      <option value="h">វត្ថុរត់ឡើង ↕ ចុះ (បន្ទាត់ផ្ដេក)</option>
+    </select>
+    <label>ទីតាំងបន្ទាត់រាប់ <span id="vLine">50%</span></label>
+    <input type="range" id="line" min="10" max="90" value="50">
+    <label>ភាពប្រែប្រួលភ្លាមៗ (ទាបជាង = ងាយចាប់) <span id="vSens">25</span></label>
+    <input type="range" id="sens" min="8" max="80" value="25">
+    <label>ទំហំតូចបំផុតនៃវត្ថុ (ចង្កឹះ ≈ 20–40) <span id="vMinArea">30</span></label>
+    <input type="range" id="minArea" min="6" max="400" value="30">
+    <label>ចម្ងាយការពារដៃ (ជុំវិញដៃ) <span id="vPad">35%</span></label>
+    <input type="range" id="pad" min="0" max="80" value="35">
+    <div class="chk"><input type="checkbox" id="beep" checked><label for="beep">បន្លឺសំឡេង «ប៊ីប» ពេលរាប់</label></div>
+    <div class="chk"><input type="checkbox" id="alertOn" checked><label for="alertOn">ជូនដំណឹងពេលវត្ថុរត់កាត់តែចាប់មិនបាន</label></div>
+    <div class="chk"><input type="checkbox" id="voice" checked><label for="voice">និយាយប្រាប់មូលហេតុជាសំឡេង</label></div>
+    <div class="chk"><input type="checkbox" id="debug"><label for="debug">បង្ហាញរូបភាពចលនា (សម្រាប់តេស្ត)</label></div>
+  </div>
+
+  <div class="tip">
+    🔔 <b>ការជូនដំណឹងពេលចាប់មិនបាន៖</b> បើមានវត្ថុរត់កាត់បន្ទាត់ តែមិនត្រូវបានរាប់ វានឹងបន្លឺសំឡេងព្រមាន បង្ហាញអក្សរក្រហម និងប្រាប់មូលហេតុ <b>ម្តងប៉ុណ្ណោះ</b> ក្នុងមួយករណី។ ដៃមនុស្សមិនបង្កការជូនដំណឹងទេ។<br>
+    <span id="voiceNote"></span><br>
+    💡 ដាក់កាមេរ៉ាឲ្យនឹង ពន្លឺថេរ ហើយផ្ទៃខាងក្រោយគួរខុសពណ៌ពីវត្ថុ។ បើវត្ថុស្តើងដូចចង្កឹះ ត្រូវដាក់កាមេរ៉ាក្បែរ ហើយបន្ថយ «ទំហំតូចបំផុត»។<br>
+    ⚠ វត្ថុពីរជាប់គ្នាពេកពេលឆ្លងកាត់ អាចរាប់ជាមួយ។ ប្រសិនបើវត្ថុពីរឆ្លងកាត់ក្នុងពេលជាមួយគ្នា ហើយមួយចាប់មិនបាន ការជូនដំណឹងអាចមិនលោតឡើង។
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $('video'), overlay = $('overlay'), octx = overlay.getContext('2d');
+const stage = $('stage');
+const PW = 240;                       // processing width (higher = thin objects survive)
+let PH = 180;
+const proc = document.createElement('canvas');
+const pctx = proc.getContext('2d', { willReadFrequently: true });
+const dbgCanvas = document.createElement('canvas');
+
+let stream = null, facing = 'environment', running = false;
+let count = 0, missed = 0, bg = null, frameN = 0;
+let tracks = [], nextId = 1;
+let hands = [];
+let handLandmarker = null, handReady = false;
+let mask = null, tmp = null, diffArr = null, labels = null;
+let lastVT = -1, ev = null, lastAlert = 0, alertTimer = 0;
+
+// ---------- Settings ----------
+const cfg = { orient: 'v', line: 0.5, sens: 25, minArea: 30, pad: 0.35, beep: true, alertOn: true, voice: true, debug: false };
+const bind = (id, fmt, num = true) => {
+  const el = $(id);
+  const apply = () => {
+    const v = el.type === 'checkbox' ? el.checked : (num ? +el.value : el.value);
+    cfg[id] = v;
+    if (id === 'line' || id === 'pad') cfg[id] = +el.value / 100;
+    const lab = $('v' + id[0].toUpperCase() + id.slice(1)); if (lab && fmt) lab.textContent = fmt(el.value);
+  };
+  el.addEventListener('input', apply); apply();
+};
+bind('orient', null, false);
+bind('line', v => v + '%');
+bind('sens', v => v);
+bind('minArea', v => v);
+bind('pad', v => v + '%');
+['beep', 'alertOn', 'voice', 'debug'].forEach(id => bind(id));
+
+// ---------- Audio / speech ----------
+let actx = null;
+function audio() {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch {}
+  return actx;
+}
+function tone(freq, dur, type = 'sine', vol = 0.08, when = 0) {
+  const a = audio(); if (!a) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq; g.gain.value = vol;
+  o.connect(g); g.connect(a.destination);
+  const t = a.currentTime + when; o.start(t); o.stop(t + dur);
+}
+const beep = () => { if (cfg.beep) tone(880, 0.07); };
+const buzz = () => { tone(420, 0.16, 'square', 0.10); tone(280, 0.22, 'square', 0.10, 0.18); };
+
+function kmVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  return speechSynthesis.getVoices().find(v => /^km/i.test(v.lang)) || null;
+}
+function updateVoiceNote() {
+  $('voiceNote').textContent = kmVoice()
+    ? '🔊 ឧបករណ៍នេះមានសំឡេងនិយាយភាសាខ្មែរ។'
+    : '🔇 ឧបករណ៍នេះគ្មានសំឡេងនិយាយភាសាខ្មែរ ដូច្នេះប្រើសំឡេងព្រមាន និងអក្សរក្រហមលើអេក្រង់ជំនួស។';
+}
+if ('speechSynthesis' in window) { speechSynthesis.onvoiceschanged = updateVoiceNote; }
+updateVoiceNote();
+function speak(text) {
+  if (!cfg.voice) return;
+  const v = kmVoice(); if (!v) return;
+  try { const u = new SpeechSynthesisUtterance(text); u.voice = v; u.lang = v.lang; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {}
+}
+
+// ---------- Hand detection (MediaPipe) ----------
+async function loadHands() {
+  try {
+    $('stHand').textContent = '⏳ កំពុងផ្ទុក AI ស្គាល់ដៃ...';
+    const mod = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const fileset = await mod.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+    handLandmarker = await mod.HandLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' },
+      runningMode: 'VIDEO', numHands: 4,
+      minHandDetectionConfidence: 0.35, minHandPresenceConfidence: 0.35, minTrackingConfidence: 0.35
+    });
+    handReady = true;
+    $('stHand').textContent = '🖐 AI ស្គាល់ដៃ៖ បើក';
+  } catch (e) {
+    console.error(e);
+    $('stHand').textContent = '⚠ AI ស្គាល់ដៃមិនដំណើរការ (ត្រូវការអ៊ីនធឺណិត)';
+  }
+}
+
+function detectHands(now) {
+  if (!handReady || video.readyState < 2) return;
+  try {
+    const res = handLandmarker.detectForVideo(video, now);
+    for (const lm of (res.landmarks || [])) {
+      let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+      for (const p of lm) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+      hands.push({ x0, y0, x1, y1, t: now });
+    }
+  } catch {}
+}
+
+function activeHands(now) {
+  hands = hands.filter(h => now - h.t < 350);
+  return hands.map(h => {
+    const w = h.x1 - h.x0, hh = h.y1 - h.y0, p = cfg.pad;
+    return { x0: (h.x0 - w * p) * PW, y0: (h.y0 - hh * p) * PH, x1: (h.x1 + w * p) * PW, y1: (h.y1 + hh * p) * PH };
+  });
+}
+
+// ---------- Motion + blobs ----------
+function dilate(W, H) {
+  for (let y = 0; y < H; y++) { const r = y * W;
+    for (let x = 0; x < W; x++) { const i = r + x;
+      tmp[i] = (mask[i] | (x > 0 ? mask[i - 1] : 0) | (x < W - 1 ? mask[i + 1] : 0)); } }
+  for (let y = 0; y < H; y++) { const r = y * W;
+    for (let x = 0; x < W; x++) { const i = r + x;
+      mask[i] = (tmp[i] | (y > 0 ? tmp[i - W] : 0) | (y < H - 1 ? tmp[i + W] : 0)); } }
+}
+
+function findBlobs(W, H, minA) {
+  const blobs = [];
+  const stack = new Int32Array(W * H);
+  labels.fill(0);
+  let id = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (!mask[i] || labels[i]) continue;
+    id++; let sp = 0; stack[sp++] = i; labels[i] = id;
+    let area = 0, sx = 0, sy = 0, x0 = x, x1 = x, y0 = y, y1 = y;
+    while (sp) {
+      const j = stack[--sp]; const jx = j % W, jy = (j / W) | 0;
+      area++; sx += jx; sy += jy;
+      if (jx < x0) x0 = jx; if (jx > x1) x1 = jx; if (jy < y0) y0 = jy; if (jy > y1) y1 = jy;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = jx + dx, ny = jy + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const k = ny * W + nx;
+        if (mask[k] && !labels[k]) { labels[k] = id; stack[sp++] = k; }
+      }
+    }
+    if (area >= minA) blobs.push({ area, cx: sx / area, cy: sy / area, x0, y0, x1, y1 });
+  }
+  return blobs;
+}
+
+const inBox = (x, y, b) => x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1;
+const rectHit = (a, b) => !(a.x1 < b.x0 || a.x0 > b.x1 || a.y1 < b.y0 || a.y0 > b.y1);
+const overlapsHand = (bl, hb) => hb.some(b => rectHit(bl, b));
+
+// ---------- Missed-object detection ----------
+const REASONS = {
+  slow:  'ឧបករណ៍ដំណើរការយឺតពេក',
+  fast:  'វត្ថុរត់លឿនពេក',
+  faint: 'វត្ថុមិនច្បាស់ ឬពណ៌ស្រដៀងផ្ទៃខាងក្រោយ',
+  small: 'វត្ថុតូចពេក',
+  blur:  'រូបភាពព្រិល',
+  other: 'មិនដឹងមូលហេតុ'
+};
+function diagnose(e) {
+  const avgDt = e.dtSum / Math.max(1, e.frames);
+  if (avgDt > 85) return 'slow';
+  if (e.frames <= 2) return 'fast';
+  if (e.maxDiff < cfg.sens * 1.6) return 'faint';
+  if (e.maxBlob < cfg.minArea) return 'small';
+  if (e.frag >= 4) return 'blur';
+  return 'other';
+}
+function alertMiss(key) {
+  const now = performance.now();
+  if (now - lastAlert < 1200) return;
+  lastAlert = now; missed++;
+  $('missed').textContent = missed;
+  const text = 'មិនអាចចាប់វត្ថុមួយបានទេ៖ ' + REASONS[key];
+  const box = $('alertBox'); box.textContent = '⚠ ' + text; box.classList.add('show');
+  clearTimeout(alertTimer); alertTimer = setTimeout(() => box.classList.remove('show'), 4000);
+  buzz(); speak(text);
+  if (navigator.vibrate) navigator.vibrate([90, 60, 90]);
+}
+
+function bandRect(L) {
+  const bh = Math.max(4, (cfg.orient === 'v' ? PW : PH) * 0.04);
+  return cfg.orient === 'v' ? { x0: L - bh, x1: L + bh, y0: 0, y1: PH } : { x0: 0, x1: PW, y0: L - bh, y1: L + bh };
+}
+
+function step(now) {
+  if (!running) return;
+  requestAnimationFrame(step);
+  if (video.readyState < 2) return;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw) return;
+  if (video.currentTime === lastVT) return;               // same camera frame, skip
+  const dt = lastVT >= 0 && video.currentTime > lastVT ? (video.currentTime - lastVT) * 1000 : 33;
+  lastVT = video.currentTime;
+  frameN++;
+
+  PH = Math.round(PW * vh / vw);
+  if (proc.width !== PW || proc.height !== PH) {
+    proc.width = PW; proc.height = PH; bg = null;
+    mask = new Uint8Array(PW * PH); tmp = new Uint8Array(PW * PH); diffArr = new Uint8Array(PW * PH); labels = new Int32Array(PW * PH);
+    dbgCanvas.width = PW; dbgCanvas.height = PH;
+  }
+  if (overlay.width !== PW * 3 || overlay.height !== PH * 3) { overlay.width = PW * 3; overlay.height = PH * 3; }
+
+  if (frameN % 2 === 0) detectHands(now);
+  const hb = activeHands(now);
+
+  pctx.drawImage(video, 0, 0, PW, PH);
+  const d = pctx.getImageData(0, 0, PW, PH).data;
+  const N = PW * PH;
+  if (!bg) { bg = new Float32Array(N); for (let i = 0; i < N; i++) bg[i] = (d[i*4] + d[i*4+1] + d[i*4+2]) / 3; }
+
+  const thr = cfg.sens, warm = frameN < 20;
+  for (let i = 0; i < N; i++) {
+    const g = (d[i*4] + d[i*4+1] + d[i*4+2]) / 3;
+    const diff = Math.abs(g - bg[i]);
+    diffArr[i] = diff > 255 ? 255 : diff;
+    const m = diff > thr;
+    mask[i] = m ? 1 : 0;
+    bg[i] += (g - bg[i]) * (warm ? 0.3 : (m ? 0.002 : 0.03));
+  }
+  dilate(PW, PH);
+
+  for (const b of hb) {                                   // wipe hand regions
+    const xa = Math.max(0, b.x0 | 0), xb = Math.min(PW - 1, Math.ceil(b.x1));
+    const ya = Math.max(0, b.y0 | 0), yb = Math.min(PH - 1, Math.ceil(b.y1));
+    for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) mask[y * PW + x] = 0;
+  }
+
+  const L = (cfg.orient === 'v' ? PW : PH) * cfg.line;
+  const band = bandRect(L);
+  const allBlobs = warm ? [] : findBlobs(PW, PH, 3);
+  const blobs = allBlobs.filter(b => b.area >= cfg.minArea);
+
+  // ---- tracking ----
+  const used = new Set();
+  const coord = o => cfg.orient === 'v' ? o.cx : o.cy;
+  const maxJump = PW * 0.2;
+  for (const t of tracks) {
+    let best = -1, bd = maxJump;
+    blobs.forEach((b, k) => {
+      if (used.has(k)) return;
+      const dd = Math.hypot(b.cx - t.cx, b.cy - t.cy);
+      if (dd < bd) { bd = dd; best = k; }
+    });
+    if (best >= 0) {
+      const b = blobs[best]; used.add(best);
+      t.prev = coord(t); t.cx = b.cx; t.cy = b.cy; t.box = b; t.missed = 0; t.age++;
+      if (overlapsHand(b, hb) || hb.some(h => inBox(b.cx, b.cy, h))) t.hand = true;
+      if (!t.counted && !t.hand && t.age >= 2 && (t.prev - L) * (coord(t) - L) < 0) {
+        t.counted = true; count++; onCount();
+      }
+    } else t.missed++;
+  }
+  blobs.forEach((b, k) => {
+    if (used.has(k)) return;
+    const isHand = overlapsHand(b, hb) || hb.some(h => inBox(b.cx, b.cy, h));
+    const c = cfg.orient === 'v' ? b.cx : b.cy;
+    tracks.push({ id: nextId++, cx: b.cx, cy: b.cy, prev: c, c0: c, box: b, age: 1, missed: 0, counted: false, hand: isHand });
+  });
+  tracks = tracks.filter(t => {                           // object that jumped over the line then vanished
+    if (t.missed < 8) return true;
+    if (!t.counted && !t.hand && t.age >= 2 && (t.c0 - L) * (coord(t) - L) < 0) { count++; onCount(); }
+    return false;
+  });
+
+  // ---- missed-object events (activity near the line that never became a count) ----
+  if (!warm) {
+    let bandPx = 0, bandMax = 0, bandArea = 0;
+    const xa = Math.max(0, band.x0 | 0), xb = Math.min(PW - 1, Math.ceil(band.x1));
+    const ya = Math.max(0, band.y0 | 0), yb = Math.min(PH - 1, Math.ceil(band.y1));
+    for (let y = ya; y <= yb; y++) for (let x = xa; x <= xb; x++) {
+      const i = y * PW + x; bandArea++;
+      if (mask[i]) { bandPx++; if (diffArr[i] > bandMax) bandMax = diffArr[i]; }
+    }
+    const evMin = Math.max(6, Math.round(cfg.minArea * 0.35));
+    const handNear = hb.some(h => rectHit(h, band));
+    if (bandPx >= evMin) {
+      if (!ev) ev = { countAtStart: count, frames: 0, peak: 0, maxDiff: 0, maxBlob: 0, frag: 0, hand: false, glob: false, dtSum: 0, quiet: 0 };
+      ev.frames++; ev.quiet = 0; ev.dtSum += dt;
+      ev.peak = Math.max(ev.peak, bandPx); ev.maxDiff = Math.max(ev.maxDiff, bandMax);
+      let n = 0;
+      for (const b of allBlobs) if (rectHit(b, band)) { n++; if (b.area > ev.maxBlob) ev.maxBlob = b.area; }
+      ev.frag = Math.max(ev.frag, n);
+      if (bandPx > bandArea * 0.5) ev.glob = true;        // whole-picture change, e.g. lighting
+      if (handNear) ev.hand = true;
+    } else if (ev) {
+      if (handNear) ev.hand = true;
+      if (++ev.quiet >= 10) {
+        const e = ev; ev = null;
+        if (cfg.alertOn && count === e.countAtStart && !e.hand && !e.glob && e.peak >= evMin * 1.5) alertMiss(diagnose(e));
+      }
+    }
+  }
+
+  draw(hb, L, band);
+  $('stInfo').textContent = `វត្ថុកំពុងចាប់៖ ${tracks.filter(t => t.missed === 0 && !t.hand).length}`;
+}
+
+function onCount() {
+  $('count').textContent = count;
+  const cb = $('countBox'); cb.classList.add('flash'); setTimeout(() => cb.classList.remove('flash'), 180);
+  beep();
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+
+function draw(hb, L, band) {
+  const S = overlay.width / PW;
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  if (cfg.debug && mask) {
+    const dc = dbgCanvas.getContext('2d');
+    const img = dc.createImageData(PW, PH);
+    for (let i = 0; i < PW * PH; i++) if (mask[i]) { img.data[i*4] = 34; img.data[i*4+1] = 197; img.data[i*4+2] = 94; img.data[i*4+3] = 170; }
+    dc.putImageData(img, 0, 0);
+    octx.imageSmoothingEnabled = false; octx.drawImage(dbgCanvas, 0, 0, overlay.width, overlay.height);
+    octx.fillStyle = 'rgba(250,204,21,.12)';
+    octx.fillRect(band.x0 * S, band.y0 * S, (band.x1 - band.x0) * S, (band.y1 - band.y0) * S);
+  }
+  octx.strokeStyle = '#facc15'; octx.lineWidth = 3; octx.setLineDash([10, 8]);
+  octx.beginPath();
+  if (cfg.orient === 'v') { octx.moveTo(L * S, 0); octx.lineTo(L * S, overlay.height); }
+  else { octx.moveTo(0, L * S); octx.lineTo(overlay.width, L * S); }
+  octx.stroke(); octx.setLineDash([]);
+  octx.strokeStyle = '#ef4444'; octx.lineWidth = 3; octx.font = '600 18px sans-serif';
+  for (const b of hb) {
+    octx.fillStyle = 'rgba(239,68,68,.18)';
+    octx.fillRect(b.x0 * S, b.y0 * S, (b.x1 - b.x0) * S, (b.y1 - b.y0) * S);
+    octx.strokeRect(b.x0 * S, b.y0 * S, (b.x1 - b.x0) * S, (b.y1 - b.y0) * S);
+    octx.fillStyle = '#ef4444'; octx.fillText('ដៃ — មិនរាប់', b.x0 * S + 4, Math.max(18, b.y0 * S - 6));
+  }
+  for (const t of tracks) {
+    if (t.missed) continue; const b = t.box;
+    octx.strokeStyle = t.hand ? '#ef4444' : (t.counted ? '#22c55e' : '#38bdf8'); octx.lineWidth = 3;
+    octx.strokeRect(b.x0 * S, b.y0 * S, (b.x1 - b.x0 + 1) * S, (b.y1 - b.y0 + 1) * S);
+  }
+}
+
+// ---------- Camera ----------
+if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  $('msg').innerHTML = '⚠ ទំព័រនេះមិនមែន https ទេ ដូច្នេះកាមេរ៉ាមិនអាចបើកបាន។<br>សូមដាក់ឯកសារលើគេហទំព័រ https (ឧ. Netlify Drop) ហើយបើកតំណនោះក្នុង Chrome ឬ Safari។';
+} else {
+  $('msg').textContent = 'ចុច «បើកកាមេរ៉ា» ដើម្បីចាប់ផ្តើម';
+}
+function resetState() { bg = null; tracks = []; frameN = 0; hands = []; ev = null; lastVT = -1; }
+async function startCam() {
+  stopCam(); audio();
+  $('msg').textContent = 'កំពុងបើកកាមេរ៉ា...'; $('msg').style.display = 'flex';
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $('msg').innerHTML = '❌ ទំព័រនេះមិនទាន់មានសុវត្ថិភាព (https) ទេ ដូច្នេះកាមេរ៉ាមិនអាចបើកបាន។<br>សូមដាក់ឯកសារនេះលើគេហទំព័រ https ជាមុនសិន (ឧ. Netlify Drop) ហើយបើកតំណនោះ។';
+    return;
+  }
+  const getCam = c => navigator.mediaDevices.getUserMedia(c);
+  try {
+    try {
+      stream = await getCam({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+    } catch (e0) {
+      if (e0 && (e0.name === 'OverconstrainedError' || e0.name === 'NotFoundError' || e0.name === 'TypeError')) stream = await getCam({ video: true, audio: false });
+      else throw e0;
+    }
+  } catch (e) {
+    const n = e && e.name;
+    $('msg').textContent =
+      n === 'NotAllowedError' ? '❌ កាមេរ៉ាត្រូវបានបដិសេធ។ សូមចុចរូបសោក្បែរអាសយដ្ឋានគេហទំព័រ ហើយអនុញ្ញាតកាមេរ៉ា រួចចុចបើកម្តងទៀត។' :
+      n === 'NotFoundError' ? '❌ រកមិនឃើញកាមេរ៉ាលើឧបករណ៍នេះទេ។' :
+      n === 'NotReadableError' ? '❌ កាមេរ៉ាកំពុងត្រូវបានប្រើដោយកម្មវិធីផ្សេង។ សូមបិទកម្មវិធីនោះសិន។' :
+      '❌ មិនអាចបើកកាមេរ៉ាបានទេ (' + (n || 'កំហុស') + ')។';
+    return;
+  }
+  video.srcObject = stream; await video.play();
+  stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  stage.style.maxHeight = '75vh';
+  $('msg').style.display = 'none';
+  resetState();
+  running = true; requestAnimationFrame(step);
+  $('btnStart').textContent = '⏹ បិទកាមេរ៉ា';
+  if (!handLandmarker && !handReady) loadHands();
+  else if (handReady) $('stHand').textContent = '🖐 AI ស្គាល់ដៃ៖ បើក';
+}
+function stopCam() {
+  running = false;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $('btnStart').textContent = '▶ បើកកាមេរ៉ា';
+}
+
+$('btnStart').onclick = () => running ? (stopCam(), $('msg').style.display = 'flex', $('msg').textContent = 'កាមេរ៉ាបានបិទ') : startCam();
+$('btnFlip').onclick = () => { facing = facing === 'environment' ? 'user' : 'environment'; if (running) startCam(); };
+$('btnReset').onclick = () => {
+  count = 0; missed = 0; $('count').textContent = 0; $('missed').textContent = 0;
+  $('alertBox').classList.remove('show'); resetState();
+};
+</script>
+</body>
+</html>
